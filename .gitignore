@@ -3,4 +3,4 @@
 /models/*-debug.onnx
 /model-tools/.venv/
 /model-tools/__pycache__/
-/models/*.mlpackage/
+/models/*.mlpackage
