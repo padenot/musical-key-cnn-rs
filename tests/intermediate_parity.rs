@@ -1,31 +1,58 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
-use beat_this::{Model, RtenRuntime, Runtime, Tensor};
 #[cfg(target_os = "macos")]
 use beat_this::RustnnCoremlModel;
+use beat_this::{Model, RtenRuntime, Runtime, Tensor};
 
 const OUTPUTS: [(&str, &str); 22] = [
-    ("/conv1/conv/Conv_output_0", "_conv1_conv_Conv_output_0_conv2d"),
+    (
+        "/conv1/conv/Conv_output_0",
+        "_conv1_conv_Conv_output_0_conv2d",
+    ),
     ("/conv1/elu/Elu_output_0", "_conv1_elu_Elu_output_0"),
-    ("/conv2/conv/Conv_output_0", "_conv2_conv_Conv_output_0_conv2d"),
+    (
+        "/conv2/conv/Conv_output_0",
+        "_conv2_conv_Conv_output_0_conv2d",
+    ),
     ("/conv2/elu/Elu_output_0", "_conv2_elu_Elu_output_0"),
     ("/pool1/MaxPool_output_0", "_pool1_MaxPool_output_0"),
-    ("/conv3/conv/Conv_output_0", "_conv3_conv_Conv_output_0_conv2d"),
+    (
+        "/conv3/conv/Conv_output_0",
+        "_conv3_conv_Conv_output_0_conv2d",
+    ),
     ("/conv3/elu/Elu_output_0", "_conv3_elu_Elu_output_0"),
-    ("/conv4/conv/Conv_output_0", "_conv4_conv_Conv_output_0_conv2d"),
+    (
+        "/conv4/conv/Conv_output_0",
+        "_conv4_conv_Conv_output_0_conv2d",
+    ),
     ("/conv4/elu/Elu_output_0", "_conv4_elu_Elu_output_0"),
     ("/pool2/MaxPool_output_0", "_pool2_MaxPool_output_0"),
-    ("/conv5/conv/Conv_output_0", "_conv5_conv_Conv_output_0_conv2d"),
+    (
+        "/conv5/conv/Conv_output_0",
+        "_conv5_conv_Conv_output_0_conv2d",
+    ),
     ("/conv5/elu/Elu_output_0", "_conv5_elu_Elu_output_0"),
-    ("/conv6/conv/Conv_output_0", "_conv6_conv_Conv_output_0_conv2d"),
+    (
+        "/conv6/conv/Conv_output_0",
+        "_conv6_conv_Conv_output_0_conv2d",
+    ),
     ("/conv6/elu/Elu_output_0", "_conv6_elu_Elu_output_0"),
     ("/pool3/MaxPool_output_0", "_pool3_MaxPool_output_0"),
-    ("/conv7/conv/Conv_output_0", "_conv7_conv_Conv_output_0_conv2d"),
+    (
+        "/conv7/conv/Conv_output_0",
+        "_conv7_conv_Conv_output_0_conv2d",
+    ),
     ("/conv7/elu/Elu_output_0", "_conv7_elu_Elu_output_0"),
-    ("/conv8/conv/Conv_output_0", "_conv8_conv_Conv_output_0_conv2d"),
+    (
+        "/conv8/conv/Conv_output_0",
+        "_conv8_conv_Conv_output_0_conv2d",
+    ),
     ("/conv8/elu/Elu_output_0", "_conv8_elu_Elu_output_0"),
-    ("/conv9/conv/Conv_output_0", "_conv9_conv_Conv_output_0_conv2d"),
+    (
+        "/conv9/conv/Conv_output_0",
+        "_conv9_conv_Conv_output_0_conv2d",
+    ),
     ("/conv9/elu/Elu_output_0", "_conv9_elu_Elu_output_0"),
     (
         "/global_avgpool/GlobalAveragePool_output_0",

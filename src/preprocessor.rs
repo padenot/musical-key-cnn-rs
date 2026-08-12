@@ -30,7 +30,10 @@ impl SpectrogramPreprocessor {
                 "PCM contains non-finite samples".to_owned(),
             ));
         }
-        let mut samples = mono.iter().map(|&sample| f64::from(sample)).collect::<Vec<_>>();
+        let mut samples = mono
+            .iter()
+            .map(|&sample| f64::from(sample))
+            .collect::<Vec<_>>();
         if sample_rate != MODEL_SAMPLE_RATE {
             samples = resample(&samples, sample_rate, MODEL_SAMPLE_RATE)
                 .map_err(|source| Error::InvalidAudio(format!("resampling failed: {source}")))?;
@@ -55,7 +58,11 @@ impl SpectrogramPreprocessor {
             )));
         }
         let log_magnitude = magnitude.map(f64::ln_1p);
-        chunk_spectrogram(log_magnitude.as_slice(), log_magnitude.rows(), log_magnitude.cols())
+        chunk_spectrogram(
+            log_magnitude.as_slice(),
+            log_magnitude.rows(),
+            log_magnitude.cols(),
+        )
     }
 }
 
@@ -91,10 +98,16 @@ fn chunk_spectrogram(values: &[f64], rows: usize, columns: usize) -> Result<Vec<
             .ok_or_else(|| Error::InvalidAudio("model input size overflow".to_owned()))?;
         let mut data = Vec::with_capacity(value_count);
         for row in values.chunks_exact(columns) {
-            let source = row.get(start..end).ok_or_else(|| {
-                Error::InvalidAudio("CQT chunk is outside its row".to_owned())
-            })?;
-            data.extend((0..MODEL_FRAMES).map(|frame| source[frame % source_frames] as f32));
+            let source = row
+                .get(start..end)
+                .ok_or_else(|| Error::InvalidAudio("CQT chunk is outside its row".to_owned()))?;
+            data.extend(
+                source
+                    .iter()
+                    .cycle()
+                    .take(MODEL_FRAMES)
+                    .map(|&value| value as f32),
+            );
         }
         chunks.push(PreparedChunk {
             tensor: Tensor {
@@ -112,14 +125,19 @@ mod tests {
     use super::{FREQUENCY_BINS, MODEL_FRAMES, chunk_spectrogram};
 
     #[test]
-    fn partitions_long_spectrograms_into_balanced_chunks()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn partitions_long_spectrograms_into_balanced_chunks() -> Result<(), Box<dyn std::error::Error>>
+    {
         let columns = MODEL_FRAMES + 188;
         let values = vec![1.0; FREQUENCY_BINS * columns];
         let chunks = chunk_spectrogram(&values, FREQUENCY_BINS, columns)?;
         assert_eq!(chunks.len(), 2);
-        assert_eq!(chunks[0].source_frames, 350);
-        assert_eq!(chunks[1].source_frames, 350);
+        assert_eq!(
+            chunks
+                .iter()
+                .map(|chunk| chunk.source_frames)
+                .collect::<Vec<_>>(),
+            [350, 350],
+        );
         assert!(chunks.iter().all(|chunk| {
             chunk.tensor.shape == [1, 1, FREQUENCY_BINS, MODEL_FRAMES]
                 && chunk.tensor.data.len() == FREQUENCY_BINS * MODEL_FRAMES

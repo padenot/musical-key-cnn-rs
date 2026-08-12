@@ -3,10 +3,10 @@ mod preprocessor;
 
 use std::path::Path;
 
-use beat_this::{Model, Tensor};
-pub use beat_this::{RtenRuntime, Runtime};
 #[cfg(target_os = "macos")]
 pub use beat_this::RustnnCoremlModel;
+use beat_this::{Model, Tensor};
+pub use beat_this::{RtenRuntime, Runtime};
 pub use key::{CamelotKey, KeyMode};
 use preprocessor::{PreparedChunk, SpectrogramPreprocessor};
 use serde::Serialize;
@@ -70,12 +70,8 @@ impl KeyDetector<RustnnCoremlModel> {
         compiled_model: &Path,
         native_batch_limit: usize,
     ) -> Result<Self> {
-        let model = RustnnCoremlModel::load_aot_batched(
-            graph,
-            compiled_model,
-            native_batch_limit,
-        )
-        .map_err(Error::Model)?;
+        let model = RustnnCoremlModel::load_aot_batched(graph, compiled_model, native_batch_limit)
+            .map_err(Error::Model)?;
         Ok(Self::new(model))
     }
 }
@@ -94,15 +90,14 @@ fn infer_weighted_logits<M: Model>(
     let mut total_weight = 0usize;
     for batch in chunks.chunks(batch_limit) {
         let tensor = batch_tensor(batch)?;
-        let mut outputs = model
-            .run(&[(INPUT_NAME, &tensor)])
-            .map_err(Error::Model)?;
+        let mut outputs = model.run(&[(INPUT_NAME, &tensor)]).map_err(Error::Model)?;
         let output = outputs.remove(OUTPUT_NAME).ok_or_else(|| {
             Error::InvalidModelOutput(format!("model did not return {OUTPUT_NAME:?}"))
         })?;
-        let expected = batch.len().checked_mul(CLASS_COUNT).ok_or_else(|| {
-            Error::InvalidModelOutput("model output size overflow".to_owned())
-        })?;
+        let expected = batch
+            .len()
+            .checked_mul(CLASS_COUNT)
+            .ok_or_else(|| Error::InvalidModelOutput("model output size overflow".to_owned()))?;
         if output.data.len() != expected || output.data.iter().any(|value| !value.is_finite()) {
             return Err(Error::InvalidModelOutput(format!(
                 "expected {expected} finite logits, got {} with shape {:?}",
@@ -135,9 +130,9 @@ fn batch_tensor(chunks: &[PreparedChunk]) -> Result<Tensor> {
         ));
     };
     let values_per_chunk = first.tensor.data.len();
-    let capacity = values_per_chunk.checked_mul(chunks.len()).ok_or_else(|| {
-        Error::InvalidModelOutput("spectrogram batch size overflow".to_owned())
-    })?;
+    let capacity = values_per_chunk
+        .checked_mul(chunks.len())
+        .ok_or_else(|| Error::InvalidModelOutput("spectrogram batch size overflow".to_owned()))?;
     let mut data = Vec::with_capacity(capacity);
     for chunk in chunks {
         if chunk.tensor.shape != first.tensor.shape || chunk.tensor.data.len() != values_per_chunk {
@@ -168,7 +163,11 @@ fn softmax(logits: [f32; CLASS_COUNT]) -> Result<[f32; CLASS_COUNT]> {
 }
 
 fn estimate_from_probabilities(probabilities: [f32; CLASS_COUNT]) -> Result<KeyEstimate> {
-    let mut ranked = probabilities.iter().copied().enumerate().collect::<Vec<_>>();
+    let mut ranked = probabilities
+        .iter()
+        .copied()
+        .enumerate()
+        .collect::<Vec<_>>();
     ranked.sort_by(|left, right| right.1.total_cmp(&left.1));
     let (best_class, probability) = ranked.first().copied().ok_or_else(|| {
         Error::InvalidModelOutput("model returned no key probabilities".to_owned())

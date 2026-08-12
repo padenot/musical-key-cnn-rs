@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
 #[cfg(not(target_os = "macos"))]
 use anyhow::bail;
+use anyhow::{Context, Result};
 use beat_this::{Model, RtenRuntime, Runtime};
 use clap::{Parser, ValueEnum};
-use musical_key_cnn::{KeyDetector, KeyEstimate};
 #[cfg(target_os = "macos")]
 use musical_key_cnn::RustnnCoremlModel;
+use musical_key_cnn::{KeyDetector, KeyEstimate};
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
@@ -16,7 +16,11 @@ const DEFAULT_RUSTNN_GRAPH: &str = "models/keynet.json";
 const DEFAULT_COREML_MODEL: &str = "models/keynet.mlmodelc";
 
 #[derive(Debug, Parser)]
-#[command(author, version, about = "MusicalKeyCNN inference with Core ML and RTen")]
+#[command(
+    author,
+    version,
+    about = "MusicalKeyCNN inference with Core ML and RTen"
+)]
 struct Cli {
     audio: PathBuf,
     #[arg(long, value_enum, default_value_t = RuntimeChoice::Auto)]
@@ -71,7 +75,10 @@ fn run(cli: Cli) -> Result<()> {
         .context("audio path is not valid UTF-8")?;
     let (samples, sample_rate) = rosa::load(audio_path, None, true)
         .with_context(|| format!("could not decode {}", cli.audio.display()))?;
-    let samples = samples.into_iter().map(|sample| sample as f32).collect::<Vec<_>>();
+    let samples = samples
+        .into_iter()
+        .map(|sample| sample as f32)
+        .collect::<Vec<_>>();
     let (backend, model) = load_model(&cli)?;
     info!(backend, "loaded MusicalKeyCNN model");
     let mut detector = KeyDetector::new(model);
@@ -103,13 +110,14 @@ fn load_rten(path: &Path) -> Result<(&'static str, DynamicModel)> {
 
 #[cfg(target_os = "macos")]
 fn load_coreml(graph: &Path, compiled_model: &Path) -> Result<(&'static str, DynamicModel)> {
-    let model = RustnnCoremlModel::load_aot_batched(graph, compiled_model, 8).with_context(|| {
-        format!(
-            "could not load RustNN graph {} with Core ML model {}",
-            graph.display(),
-            compiled_model.display(),
-        )
-    })?;
+    let model =
+        RustnnCoremlModel::load_aot_batched(graph, compiled_model, 8).with_context(|| {
+            format!(
+                "could not load RustNN graph {} with Core ML model {}",
+                graph.display(),
+                compiled_model.display(),
+            )
+        })?;
     Ok(("rustnn-coreml", DynamicModel(Box::new(model))))
 }
 

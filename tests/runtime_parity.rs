@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
-use beat_this::{Model, RtenRuntime, Runtime, Tensor};
 #[cfg(target_os = "macos")]
 use beat_this::RustnnCoremlModel;
+use beat_this::{Model, RtenRuntime, Runtime, Tensor};
 
 fn input() -> Tensor {
     let shape = vec![1, 1, 105, 512];
