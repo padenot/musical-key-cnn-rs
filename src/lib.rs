@@ -5,7 +5,7 @@ mod preprocessor;
 use std::path::Path;
 
 #[cfg(all(target_os = "macos", feature = "coreml"))]
-pub use beat_this::RustnnCoremlModel;
+pub use beat_this::{CoreMlAcceleration, RustnnCoremlModel};
 use beat_this::{Model, Tensor};
 pub use beat_this::{RtenRuntime, Runtime};
 pub use key::{CamelotKey, KeyMode};
@@ -58,10 +58,10 @@ impl<M: Model> KeyDetector<M> {
 
     pub fn detect(&mut self, mono: &[f32], sample_rate: u32) -> Result<KeyEstimate> {
         let prepared = self.preprocessor.prepare(mono, sample_rate)?;
-        self.detect_prepared(prepared)
+        self.detect_prepared(&prepared)
     }
 
-    pub fn detect_prepared(&mut self, prepared: PreparedAudio) -> Result<KeyEstimate> {
+    pub fn detect_prepared(&mut self, prepared: &PreparedAudio) -> Result<KeyEstimate> {
         let logits = infer_logits(&mut self.model, &prepared.spectrogram)?;
         let probabilities = softmax(logits)?;
         estimate_from_probabilities(probabilities)
@@ -75,8 +75,13 @@ impl<M: Model> KeyDetector<M> {
 
 #[cfg(all(target_os = "macos", feature = "coreml"))]
 impl KeyDetector<RustnnCoremlModel> {
-    pub fn from_coreml_assets(graph: &Path, compiled_model: &Path) -> Result<Self> {
-        let model = RustnnCoremlModel::load_aot(graph, compiled_model).map_err(Error::Model)?;
+    pub fn from_coreml_assets(
+        graph: &Path,
+        compiled_model: &Path,
+        acceleration: CoreMlAcceleration,
+    ) -> Result<Self> {
+        let model = RustnnCoremlModel::load_aot(graph, compiled_model, acceleration)
+            .map_err(Error::Model)?;
         Ok(Self::new(model))
     }
 }

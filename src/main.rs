@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use beat_this::{Model, RtenRuntime, Runtime};
 use clap::{Parser, ValueEnum};
 #[cfg(all(target_os = "macos", feature = "coreml"))]
-use musical_key_cnn::RustnnCoremlModel;
+use musical_key_cnn::{CoreMlAcceleration, RustnnCoremlModel};
 use musical_key_cnn::{
     KeyDetector, KeyEstimate, KeyPreprocessor, MAX_COREML_FRAMES, PreparedAudio,
 };
@@ -77,7 +77,7 @@ fn run(cli: Cli) -> Result<()> {
         .collect::<Vec<_>>();
     let prepared = KeyPreprocessor::new().prepare(&samples, sample_rate)?;
     let mut models = load_models(&cli)?;
-    let (backend, estimate) = models.detect(prepared)?;
+    let (backend, estimate) = models.detect(&prepared)?;
     info!(backend, "completed MusicalKeyCNN inference");
     print_estimate(&estimate)?;
     Ok(())
@@ -90,7 +90,7 @@ struct LoadedModels {
 }
 
 impl LoadedModels {
-    fn detect(&mut self, prepared: PreparedAudio) -> Result<(&'static str, KeyEstimate)> {
+    fn detect(&mut self, prepared: &PreparedAudio) -> Result<(&'static str, KeyEstimate)> {
         let frames = prepared.frame_count();
         match self.choice {
             RuntimeChoice::Coreml if frames > MAX_COREML_FRAMES => anyhow::bail!(
@@ -131,7 +131,7 @@ impl LoadedModels {
 
 fn detect_rten(
     detector: &mut Option<KeyDetector<DynamicModel>>,
-    prepared: PreparedAudio,
+    prepared: &PreparedAudio,
 ) -> Result<(&'static str, KeyEstimate)> {
     detector
         .as_mut()
@@ -175,13 +175,14 @@ fn load_rten(path: &Path) -> Result<DynamicModel> {
 
 #[cfg(all(target_os = "macos", feature = "coreml"))]
 fn load_coreml(graph: &Path, compiled_model: &Path) -> Result<DynamicModel> {
-    let model = RustnnCoremlModel::load_aot(graph, compiled_model).with_context(|| {
-        format!(
-            "could not load RustNN graph {} with Core ML model {}",
-            graph.display(),
-            compiled_model.display(),
-        )
-    })?;
+    let model = RustnnCoremlModel::load_aot(graph, compiled_model, CoreMlAcceleration::Gpu)
+        .with_context(|| {
+            format!(
+                "could not load RustNN graph {} with Core ML model {}",
+                graph.display(),
+                compiled_model.display(),
+            )
+        })?;
     Ok(DynamicModel(Box::new(model)))
 }
 

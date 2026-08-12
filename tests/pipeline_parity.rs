@@ -39,7 +39,7 @@ fn rust_pipeline_matches_librosa_and_pytorch() -> Result<()> {
         &synthetic_audio(fixture.sample_rate, fixture.sample_count),
         fixture.sample_rate,
     )?;
-    let estimate = detector.detect_prepared(prepared)?;
+    let estimate = detector.detect_prepared(&prepared)?;
     ensure!(estimate.key.to_string() == fixture.camelot, "key differs");
     let maximum_difference = estimate
         .probabilities

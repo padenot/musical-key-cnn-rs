@@ -8,13 +8,20 @@ description = "Hardware-accelerated Rust inference for MusicalKeyCNN"
 
 [features]
 default = ["cli", "coreml"]
-cli = ["dep:clap", "dep:serde_json", "dep:tracing", "dep:tracing-subscriber"]
+cli = [
+    "dep:clap",
+    "dep:env_logger",
+    "dep:serde_json",
+    "dep:tracing",
+    "dep:tracing-subscriber",
+]
 coreml = ["beat-this/rustnn-coreml"]
 
 [dependencies]
 anyhow = "1.0"
 beat-this = { path = "../beat-this-rs", default-features = false }
 clap = { version = "4.5", features = ["derive"], optional = true }
+env_logger = { version = "0.10", optional = true }
 rosa = { path = "../rosa" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", optional = true }
@@ -41,3 +48,7 @@ unwrap_used = "deny"
 name = "musical-key-cnn"
 path = "src/main.rs"
 required-features = ["cli"]
+
+[[example]]
+name = "inference_benchmark"
+required-features = ["cli", "coreml"]

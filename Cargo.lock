@@ -859,6 +859,7 @@ dependencies = [
  "approx",
  "beat-this",
  "clap",
+ "env_logger",
  "rosa",
  "serde",
  "serde_json",

@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
-use beat_this::RustnnCoremlModel;
+use beat_this::{CoreMlAcceleration, RustnnCoremlModel};
 use beat_this::{Model, RtenRuntime, Runtime, Tensor};
 
 const FRAME_COUNTS: [usize; 4] = [8, 121, 512, 1_501];
@@ -22,6 +22,7 @@ fn coreml_matches_rten() -> Result<()> {
     let mut coreml = RustnnCoremlModel::load_aot(
         Path::new("models/keynet.json"),
         Path::new("models/keynet.mlmodelc"),
+        CoreMlAcceleration::Gpu,
     )?;
     for frames in FRAME_COUNTS {
         let input = input(frames);
