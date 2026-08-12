@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 from export_model import load_model
-from reference_predict import camelot_class, chunked_logits
+from reference_predict import camelot_class
 
 
 LOGGER = logging.getLogger("musical_key_cnn.pipeline_fixture")
@@ -56,7 +56,8 @@ def main() -> int:
     ).astype(np.float32)
     model = load_model(arguments.checkpoint)
     with torch.inference_mode():
-        logits = chunked_logits(model, spectrogram)
+        tensor = torch.from_numpy(spectrogram).unsqueeze(0).unsqueeze(0)
+        logits = model(tensor)[0].numpy()
         probabilities = torch.softmax(torch.from_numpy(logits), dim=0).numpy()
     payload = {
         "sample_rate": SAMPLE_RATE,

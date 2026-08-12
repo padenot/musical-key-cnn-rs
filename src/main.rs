@@ -1,14 +1,14 @@
 use std::path::{Path, PathBuf};
 
-#[cfg(not(all(target_os = "macos", feature = "coreml")))]
-use anyhow::bail;
 use anyhow::{Context, Result};
 use beat_this::{Model, RtenRuntime, Runtime};
 use clap::{Parser, ValueEnum};
 #[cfg(all(target_os = "macos", feature = "coreml"))]
 use musical_key_cnn::RustnnCoremlModel;
-use musical_key_cnn::{KeyDetector, KeyEstimate};
-use tracing::{error, info};
+use musical_key_cnn::{
+    KeyDetector, KeyEstimate, KeyPreprocessor, MAX_COREML_FRAMES, PreparedAudio,
+};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 const DEFAULT_ONNX_MODEL: &str = "models/keynet.onnx";
@@ -43,10 +43,6 @@ enum RuntimeChoice {
 struct DynamicModel(Box<dyn Model>);
 
 impl Model for DynamicModel {
-    fn max_batch_size(&self) -> usize {
-        self.0.max_batch_size()
-    }
-
     fn run(
         &mut self,
         inputs: &[(&str, &beat_this::Tensor)],
@@ -79,51 +75,119 @@ fn run(cli: Cli) -> Result<()> {
         .into_iter()
         .map(|sample| sample as f32)
         .collect::<Vec<_>>();
-    let (backend, model) = load_model(&cli)?;
-    info!(backend, "loaded MusicalKeyCNN model");
-    let mut detector = KeyDetector::new(model);
-    let estimate = detector.detect(&samples, sample_rate)?;
+    let prepared = KeyPreprocessor::new().prepare(&samples, sample_rate)?;
+    let mut models = load_models(&cli)?;
+    let (backend, estimate) = models.detect(prepared)?;
+    info!(backend, "completed MusicalKeyCNN inference");
     print_estimate(&estimate)?;
     Ok(())
 }
 
-fn load_model(cli: &Cli) -> Result<(&'static str, DynamicModel)> {
-    match cli.runtime {
-        RuntimeChoice::Rten => load_rten(&cli.model),
-        RuntimeChoice::Coreml => load_coreml(&cli.graph, &cli.coreml_model),
-        RuntimeChoice::Auto => {
-            #[cfg(all(target_os = "macos", feature = "coreml"))]
-            if cli.graph.is_file() && cli.coreml_model.is_dir() {
-                return load_coreml(&cli.graph, &cli.coreml_model);
+struct LoadedModels {
+    choice: RuntimeChoice,
+    coreml: Option<KeyDetector<DynamicModel>>,
+    rten: Option<KeyDetector<DynamicModel>>,
+}
+
+impl LoadedModels {
+    fn detect(&mut self, prepared: PreparedAudio) -> Result<(&'static str, KeyEstimate)> {
+        let frames = prepared.frame_count();
+        match self.choice {
+            RuntimeChoice::Coreml if frames > MAX_COREML_FRAMES => anyhow::bail!(
+                "Core ML accepts at most {MAX_COREML_FRAMES} CQT frames, got {frames}; use --runtime rten"
+            ),
+            RuntimeChoice::Coreml => {
+                let detector = self
+                    .coreml
+                    .as_mut()
+                    .context("Core ML model disappeared before inference")?;
+                detector
+                    .detect_prepared(prepared)
+                    .map(|estimate| ("rustnn-coreml", estimate))
+                    .map_err(Into::into)
             }
-            load_rten(&cli.model)
+            RuntimeChoice::Auto if frames <= MAX_COREML_FRAMES && self.coreml.is_some() => {
+                let detector = self
+                    .coreml
+                    .as_mut()
+                    .context("Core ML model disappeared before inference")?;
+                detector
+                    .detect_prepared(prepared)
+                    .map(|estimate| ("rustnn-coreml", estimate))
+                    .map_err(Into::into)
+            }
+            RuntimeChoice::Auto if frames > MAX_COREML_FRAMES => {
+                warn!(
+                    frames,
+                    maximum_coreml_frames = MAX_COREML_FRAMES,
+                    "track exceeds Core ML time bound; using full-track RTen inference"
+                );
+                detect_rten(&mut self.rten, prepared)
+            }
+            RuntimeChoice::Rten | RuntimeChoice::Auto => detect_rten(&mut self.rten, prepared),
         }
     }
 }
 
-fn load_rten(path: &Path) -> Result<(&'static str, DynamicModel)> {
+fn detect_rten(
+    detector: &mut Option<KeyDetector<DynamicModel>>,
+    prepared: PreparedAudio,
+) -> Result<(&'static str, KeyEstimate)> {
+    detector
+        .as_mut()
+        .context("RTen model is unavailable")?
+        .detect_prepared(prepared)
+        .map(|estimate| ("rten", estimate))
+        .map_err(Into::into)
+}
+
+fn load_models(cli: &Cli) -> Result<LoadedModels> {
+    let coreml = if cli.runtime != RuntimeChoice::Rten {
+        match load_coreml(&cli.graph, &cli.coreml_model) {
+            Ok(model) => Some(KeyDetector::new(model)),
+            Err(error) if cli.runtime == RuntimeChoice::Auto => {
+                warn!(%error, "Core ML model unavailable; using RTen");
+                None
+            }
+            Err(error) => return Err(error),
+        }
+    } else {
+        None
+    };
+    let rten = if cli.runtime != RuntimeChoice::Coreml {
+        Some(KeyDetector::new(load_rten(&cli.model)?))
+    } else {
+        None
+    };
+    Ok(LoadedModels {
+        choice: cli.runtime,
+        coreml,
+        rten,
+    })
+}
+
+fn load_rten(path: &Path) -> Result<DynamicModel> {
     let model = RtenRuntime
         .load_model(path)
         .with_context(|| format!("could not load ONNX model {}", path.display()))?;
-    Ok(("rten", DynamicModel(Box::new(model))))
+    Ok(DynamicModel(Box::new(model)))
 }
 
 #[cfg(all(target_os = "macos", feature = "coreml"))]
-fn load_coreml(graph: &Path, compiled_model: &Path) -> Result<(&'static str, DynamicModel)> {
-    let model =
-        RustnnCoremlModel::load_aot_batched(graph, compiled_model, 8).with_context(|| {
-            format!(
-                "could not load RustNN graph {} with Core ML model {}",
-                graph.display(),
-                compiled_model.display(),
-            )
-        })?;
-    Ok(("rustnn-coreml", DynamicModel(Box::new(model))))
+fn load_coreml(graph: &Path, compiled_model: &Path) -> Result<DynamicModel> {
+    let model = RustnnCoremlModel::load_aot(graph, compiled_model).with_context(|| {
+        format!(
+            "could not load RustNN graph {} with Core ML model {}",
+            graph.display(),
+            compiled_model.display(),
+        )
+    })?;
+    Ok(DynamicModel(Box::new(model)))
 }
 
 #[cfg(not(all(target_os = "macos", feature = "coreml")))]
-fn load_coreml(_graph: &Path, _compiled_model: &Path) -> Result<(&'static str, DynamicModel)> {
-    bail!("Core ML support is unavailable in this build")
+fn load_coreml(_graph: &Path, _compiled_model: &Path) -> Result<DynamicModel> {
+    anyhow::bail!("Core ML support is unavailable in this build")
 }
 
 fn print_estimate(estimate: &KeyEstimate) -> Result<()> {

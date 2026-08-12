@@ -1,7 +1,8 @@
+#![cfg(all(target_os = "macos", feature = "coreml"))]
+
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
-#[cfg(target_os = "macos")]
 use beat_this::RustnnCoremlModel;
 use beat_this::{Model, RtenRuntime, Runtime, Tensor};
 
@@ -70,7 +71,6 @@ fn input() -> Tensor {
 
 #[test]
 #[ignore = "diagnostic model exposes large intermediate tensors"]
-#[cfg(target_os = "macos")]
 fn coreml_intermediates_match_rten() -> Result<()> {
     let input = input();
     let mut rten = RtenRuntime.load_model(Path::new("models/keynet-debug.onnx"))?;

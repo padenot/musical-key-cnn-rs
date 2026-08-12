@@ -105,7 +105,10 @@
           1,
           1,
           105,
-          512
+          {
+            "maxSize": 4096,
+            "name": "sequence_length"
+          }
         ]
       },
       "kind": "input",
@@ -344,7 +347,10 @@
           1,
           20,
           105,
-          512
+          {
+            "maxSize": 4096,
+            "name": "sequence_length"
+          }
         ]
       },
       "kind": "intermediate",
@@ -358,7 +364,10 @@
           1,
           20,
           105,
-          512
+          {
+            "maxSize": 4096,
+            "name": "sequence_length"
+          }
         ]
       },
       "kind": "intermediate",
@@ -372,7 +381,10 @@
           1,
           20,
           105,
-          512
+          {
+            "maxSize": 4096,
+            "name": "sequence_length"
+          }
         ]
       },
       "kind": "intermediate",
@@ -386,7 +398,10 @@
           1,
           20,
           105,
-          512
+          {
+            "maxSize": 4096,
+            "name": "sequence_length"
+          }
         ]
       },
       "kind": "intermediate",
@@ -400,7 +415,10 @@
           1,
           20,
           52,
-          256
+          {
+            "maxSize": 2048,
+            "name": "spatial(sequence_length,k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -414,7 +432,10 @@
           1,
           40,
           52,
-          256
+          {
+            "maxSize": 2048,
+            "name": "spatial(sequence_length,k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -428,7 +449,10 @@
           1,
           40,
           52,
-          256
+          {
+            "maxSize": 2048,
+            "name": "spatial(sequence_length,k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -442,7 +466,10 @@
           1,
           40,
           52,
-          256
+          {
+            "maxSize": 2048,
+            "name": "spatial(sequence_length,k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -456,7 +483,10 @@
           1,
           40,
           52,
-          256
+          {
+            "maxSize": 2048,
+            "name": "spatial(sequence_length,k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -470,7 +500,10 @@
           1,
           40,
           26,
-          128
+          {
+            "maxSize": 1024,
+            "name": "spatial(spatial(sequence_length,k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -484,7 +517,10 @@
           1,
           80,
           26,
-          128
+          {
+            "maxSize": 1024,
+            "name": "spatial(spatial(sequence_length,k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -498,7 +534,10 @@
           1,
           80,
           26,
-          128
+          {
+            "maxSize": 1024,
+            "name": "spatial(spatial(sequence_length,k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -512,7 +551,10 @@
           1,
           80,
           26,
-          128
+          {
+            "maxSize": 1024,
+            "name": "spatial(spatial(sequence_length,k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -526,7 +568,10 @@
           1,
           80,
           26,
-          128
+          {
+            "maxSize": 1024,
+            "name": "spatial(spatial(sequence_length,k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -540,7 +585,10 @@
           1,
           80,
           13,
-          64
+          {
+            "maxSize": 512,
+            "name": "spatial(spatial(spatial(sequence_length,k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -554,7 +602,10 @@
           1,
           160,
           13,
-          64
+          {
+            "maxSize": 512,
+            "name": "spatial(spatial(spatial(sequence_length,k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -568,7 +619,10 @@
           1,
           160,
           13,
-          64
+          {
+            "maxSize": 512,
+            "name": "spatial(spatial(spatial(sequence_length,k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -582,7 +636,10 @@
           1,
           160,
           13,
-          64
+          {
+            "maxSize": 512,
+            "name": "spatial(spatial(spatial(sequence_length,k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -596,7 +653,10 @@
           1,
           160,
           13,
-          64
+          {
+            "maxSize": 512,
+            "name": "spatial(spatial(spatial(sequence_length,k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -610,7 +670,10 @@
           1,
           24,
           13,
-          64
+          {
+            "maxSize": 512,
+            "name": "spatial(spatial(spatial(sequence_length,k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",
@@ -624,7 +687,10 @@
           1,
           24,
           13,
-          64
+          {
+            "maxSize": 512,
+            "name": "spatial(spatial(spatial(sequence_length,k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0),k=2,s=2,d=1,p=0+0)"
+          }
         ]
       },
       "kind": "intermediate",

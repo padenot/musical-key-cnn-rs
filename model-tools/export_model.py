@@ -13,13 +13,14 @@ from onnx.reference import ReferenceEvaluator
 
 
 FREQUENCY_BINS = 105
-MODEL_FRAMES = 512
+EXPORT_FRAMES = 512
+VALIDATION_FRAMES = (8, 121, EXPORT_FRAMES, 1_501)
 LOGGER = logging.getLogger("musical_key_cnn.export")
 
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Export the upstream MusicalKeyCNN checkpoint to fixed-shape ONNX."
+        description="Export the upstream MusicalKeyCNN checkpoint to variable-width ONNX."
     )
     parser.add_argument("checkpoint", type=Path)
     parser.add_argument("output", type=Path)
@@ -52,7 +53,7 @@ def main() -> int:
     model = load_model(arguments.checkpoint)
     random = np.random.default_rng(0x4B4559)
     example = random.normal(
-        size=(1, 1, FREQUENCY_BINS, MODEL_FRAMES)
+        size=(1, 1, FREQUENCY_BINS, EXPORT_FRAMES)
     ).astype(np.float32)
     tensor = torch.from_numpy(example)
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
@@ -65,18 +66,27 @@ def main() -> int:
         opset_version=17,
         do_constant_folding=True,
         dynamo=False,
+        dynamic_axes={"spectrogram": {3: "sequence_length"}},
     )
 
     exported = onnx.load(arguments.output)
     onnx.checker.check_model(exported)
+    evaluator = ReferenceEvaluator(exported)
+    maximum_error = 0.0
     with torch.inference_mode():
-        expected = model(tensor).numpy()
-    actual = ReferenceEvaluator(exported).run(None, {"spectrogram": example})[0]
-    maximum_error = float(np.max(np.abs(actual - expected)))
-    if not np.allclose(actual, expected, rtol=1e-4, atol=1e-5):
-        raise RuntimeError(
-            f"ONNX output differs from PyTorch; maximum error {maximum_error:.8f}"
-        )
+        for frames in VALIDATION_FRAMES:
+            sample = random.normal(
+                size=(1, 1, FREQUENCY_BINS, frames)
+            ).astype(np.float32)
+            expected = model(torch.from_numpy(sample)).numpy()
+            actual = evaluator.run(None, {"spectrogram": sample})[0]
+            error = float(np.max(np.abs(actual - expected)))
+            maximum_error = max(maximum_error, error)
+            if not np.allclose(actual, expected, rtol=1e-4, atol=1e-5):
+                raise RuntimeError(
+                    "ONNX output differs from PyTorch at "
+                    f"{frames} frames; maximum error {error:.8f}"
+                )
     LOGGER.info(
         "exported %s (%d bytes), maximum PyTorch error %.8f",
         arguments.output,

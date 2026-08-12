@@ -4,8 +4,10 @@ A Rust inference port of [a1ex90/MusicalKeyCNN](https://github.com/a1ex90/Musica
 using its trained `keynet.pt` weights and 24-class Camelot output. The model is MIT-licensed.
 
 The library accepts decoded mono PCM, computes the model's 105-bin log-magnitude CQT, and runs
-fixed-size spectrogram chunks. On macOS, the CLI prefers the ahead-of-time RustNN/Core ML model;
-the same ONNX model runs through RTen as the portable reference backend.
+the complete variable-width spectrogram. On macOS, the CLI prefers the ahead-of-time RustNN/Core
+ML model; the same ONNX model runs through RTen as the portable reference backend. The Core ML
+graph accepts 8 through 4,096 CQT frames (roughly 1.6 seconds through 13 minutes 39 seconds);
+RTen's symbolic ONNX input has the same minimum and no upper bound.
 
 This repository currently expects sibling checkouts of `beat-this-rs`, `rosa`, `rustnn`, and
 `onnx2webnn` under `~/src/repositories`. `rosa` includes the strict librosa CQT parity fixes used
@@ -34,7 +36,8 @@ Lower ONNX to a backend-independent RustNN graph:
 ```sh
 cargo run --release --no-default-features \
   --manifest-path ../onnx2webnn/Cargo.toml -- \
-  convert --input models/keynet.onnx --output models/keynet.json --optimize
+  convert --input models/keynet.onnx --output models/keynet.json --optimize \
+  --experimental-dynamic-inputs
 ```
 
 Compile the Core ML model ahead of time:
@@ -86,5 +89,7 @@ cargo test --test intermediate_parity -- --ignored --nocapture
 ```
 
 The first command checks the full Rust CQT + RTen result against a deterministic librosa +
-PyTorch fixture. The ignored diagnostic exposes every neural-network stage and compares RTen to
-Core ML; its largest observed layer difference is below `4e-6`.
+PyTorch fixture. Runtime parity covers the minimum 8- and realistic 121-, 512-, and 1,501-frame
+inputs. Boundary routing tests cover 4,096 and 4,097 frames without allocating maximum-sized
+model activations. The ignored diagnostic exposes every neural-network stage and compares RTen
+to Core ML.

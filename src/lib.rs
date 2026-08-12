@@ -9,7 +9,6 @@ pub use beat_this::RustnnCoremlModel;
 use beat_this::{Model, Tensor};
 pub use beat_this::{RtenRuntime, Runtime};
 pub use key::{CamelotKey, KeyMode};
-use preprocessor::PreparedChunk;
 pub use preprocessor::{KeyPreprocessor, PreparedAudio};
 use serde::Serialize;
 use thiserror::Error;
@@ -17,6 +16,11 @@ use thiserror::Error;
 const CLASS_COUNT: usize = 24;
 const INPUT_NAME: &str = "spectrogram";
 const OUTPUT_NAME: &str = "logits";
+
+/// Smallest time dimension that survives the model's three 2x2 pooling stages.
+pub const MIN_MODEL_FRAMES: usize = 8;
+/// Maximum variable time dimension supported by the compiled Core ML graph.
+pub const MAX_COREML_FRAMES: usize = 4_096;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -58,7 +62,7 @@ impl<M: Model> KeyDetector<M> {
     }
 
     pub fn detect_prepared(&mut self, prepared: PreparedAudio) -> Result<KeyEstimate> {
-        let logits = infer_weighted_logits(&mut self.model, &prepared.chunks)?;
+        let logits = infer_logits(&mut self.model, &prepared.spectrogram)?;
         let probabilities = softmax(logits)?;
         estimate_from_probabilities(probabilities)
     }
@@ -71,89 +75,35 @@ impl<M: Model> KeyDetector<M> {
 
 #[cfg(all(target_os = "macos", feature = "coreml"))]
 impl KeyDetector<RustnnCoremlModel> {
-    pub fn from_coreml_assets(
-        graph: &Path,
-        compiled_model: &Path,
-        native_batch_limit: usize,
-    ) -> Result<Self> {
-        let model = RustnnCoremlModel::load_aot_batched(graph, compiled_model, native_batch_limit)
-            .map_err(Error::Model)?;
+    pub fn from_coreml_assets(graph: &Path, compiled_model: &Path) -> Result<Self> {
+        let model = RustnnCoremlModel::load_aot(graph, compiled_model).map_err(Error::Model)?;
         Ok(Self::new(model))
     }
 }
 
-fn infer_weighted_logits<M: Model>(
-    model: &mut M,
-    chunks: &[PreparedChunk],
-) -> Result<[f32; CLASS_COUNT]> {
-    let batch_limit = model.max_batch_size();
-    if batch_limit == 0 {
-        return Err(Error::InvalidModelOutput(
-            "model reports a zero batch limit".to_owned(),
-        ));
-    }
-    let mut sums = [0.0_f64; CLASS_COUNT];
-    let mut total_weight = 0usize;
-    for batch in chunks.chunks(batch_limit) {
-        let tensor = batch_tensor(batch)?;
-        let mut outputs = model.run(&[(INPUT_NAME, &tensor)]).map_err(Error::Model)?;
-        let output = outputs.remove(OUTPUT_NAME).ok_or_else(|| {
-            Error::InvalidModelOutput(format!("model did not return {OUTPUT_NAME:?}"))
-        })?;
-        let expected = batch
-            .len()
-            .checked_mul(CLASS_COUNT)
-            .ok_or_else(|| Error::InvalidModelOutput("model output size overflow".to_owned()))?;
-        if output.data.len() != expected || output.data.iter().any(|value| !value.is_finite()) {
-            return Err(Error::InvalidModelOutput(format!(
-                "expected {expected} finite logits, got {} with shape {:?}",
-                output.data.len(),
-                output.shape,
-            )));
-        }
-        for (logits, chunk) in output.data.chunks_exact(CLASS_COUNT).zip(batch) {
-            let weight = chunk.source_frames;
-            total_weight = total_weight.checked_add(weight).ok_or_else(|| {
-                Error::InvalidModelOutput("spectrogram weight overflow".to_owned())
-            })?;
-            for (sum, &logit) in sums.iter_mut().zip(logits) {
-                *sum += f64::from(logit) * weight as f64;
-            }
-        }
-    }
-    if total_weight == 0 {
-        return Err(Error::InvalidModelOutput(
-            "model received no weighted spectrogram frames".to_owned(),
-        ));
-    }
-    Ok(sums.map(|sum| (sum / total_weight as f64) as f32))
-}
-
-fn batch_tensor(chunks: &[PreparedChunk]) -> Result<Tensor> {
-    let Some(first) = chunks.first() else {
-        return Err(Error::InvalidModelOutput(
-            "cannot infer an empty spectrogram batch".to_owned(),
-        ));
-    };
-    let values_per_chunk = first.tensor.data.len();
-    let capacity = values_per_chunk
-        .checked_mul(chunks.len())
-        .ok_or_else(|| Error::InvalidModelOutput("spectrogram batch size overflow".to_owned()))?;
-    let mut data = Vec::with_capacity(capacity);
-    for chunk in chunks {
-        if chunk.tensor.shape != first.tensor.shape || chunk.tensor.data.len() != values_per_chunk {
-            return Err(Error::InvalidModelOutput(
-                "spectrogram chunks have inconsistent shapes".to_owned(),
-            ));
-        }
-        data.extend_from_slice(&chunk.tensor.data);
-    }
-    let mut shape = first.tensor.shape.clone();
-    let batch_dimension = shape.first_mut().ok_or_else(|| {
-        Error::InvalidModelOutput("spectrogram tensor has no batch dimension".to_owned())
+fn infer_logits<M: Model>(model: &mut M, spectrogram: &Tensor) -> Result<[f32; CLASS_COUNT]> {
+    let mut outputs = model
+        .run(&[(INPUT_NAME, spectrogram)])
+        .map_err(Error::Model)?;
+    let output = outputs.remove(OUTPUT_NAME).ok_or_else(|| {
+        Error::InvalidModelOutput(format!("model did not return {OUTPUT_NAME:?}"))
     })?;
-    *batch_dimension = chunks.len();
-    Ok(Tensor { shape, data })
+    if output.shape != [1, CLASS_COUNT]
+        || output.data.len() != CLASS_COUNT
+        || output.data.iter().any(|value| !value.is_finite())
+    {
+        return Err(Error::InvalidModelOutput(format!(
+            "expected [1, {CLASS_COUNT}] finite logits, got {} values with shape {:?}",
+            output.data.len(),
+            output.shape,
+        )));
+    }
+    output.data.try_into().map_err(|values: Vec<f32>| {
+        Error::InvalidModelOutput(format!(
+            "expected {CLASS_COUNT} logits, got {}",
+            values.len()
+        ))
+    })
 }
 
 fn softmax(logits: [f32; CLASS_COUNT]) -> Result<[f32; CLASS_COUNT]> {
@@ -198,7 +148,10 @@ mod tests {
     fn softmax_is_normalized() -> Result<(), Box<dyn std::error::Error>> {
         let probabilities = softmax([0.0; 24])?;
         assert_abs_diff_eq!(probabilities.iter().sum::<f32>(), 1.0, epsilon = 1e-6);
-        assert_abs_diff_eq!(probabilities[0], 1.0 / 24.0, epsilon = 1e-6);
+        let first = probabilities
+            .first()
+            .ok_or("softmax returned no probabilities")?;
+        assert_abs_diff_eq!(*first, 1.0 / 24.0, epsilon = 1e-6);
         Ok(())
     }
 }
