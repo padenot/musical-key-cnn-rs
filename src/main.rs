@@ -1,11 +1,11 @@
 use std::path::{Path, PathBuf};
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(all(target_os = "macos", feature = "coreml")))]
 use anyhow::bail;
 use anyhow::{Context, Result};
 use beat_this::{Model, RtenRuntime, Runtime};
 use clap::{Parser, ValueEnum};
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "coreml"))]
 use musical_key_cnn::RustnnCoremlModel;
 use musical_key_cnn::{KeyDetector, KeyEstimate};
 use tracing::{error, info};
@@ -92,7 +92,7 @@ fn load_model(cli: &Cli) -> Result<(&'static str, DynamicModel)> {
         RuntimeChoice::Rten => load_rten(&cli.model),
         RuntimeChoice::Coreml => load_coreml(&cli.graph, &cli.coreml_model),
         RuntimeChoice::Auto => {
-            #[cfg(target_os = "macos")]
+            #[cfg(all(target_os = "macos", feature = "coreml"))]
             if cli.graph.is_file() && cli.coreml_model.is_dir() {
                 return load_coreml(&cli.graph, &cli.coreml_model);
             }
@@ -108,7 +108,7 @@ fn load_rten(path: &Path) -> Result<(&'static str, DynamicModel)> {
     Ok(("rten", DynamicModel(Box::new(model))))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "coreml"))]
 fn load_coreml(graph: &Path, compiled_model: &Path) -> Result<(&'static str, DynamicModel)> {
     let model =
         RustnnCoremlModel::load_aot_batched(graph, compiled_model, 8).with_context(|| {
@@ -121,9 +121,9 @@ fn load_coreml(graph: &Path, compiled_model: &Path) -> Result<(&'static str, Dyn
     Ok(("rustnn-coreml", DynamicModel(Box::new(model))))
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(all(target_os = "macos", feature = "coreml")))]
 fn load_coreml(_graph: &Path, _compiled_model: &Path) -> Result<(&'static str, DynamicModel)> {
-    bail!("Core ML is only available on macOS")
+    bail!("Core ML support is unavailable in this build")
 }
 
 fn print_estimate(estimate: &KeyEstimate) -> Result<()> {
