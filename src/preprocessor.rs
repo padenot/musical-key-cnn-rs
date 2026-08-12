@@ -1,5 +1,5 @@
 use beat_this::Tensor;
-use rosa::{CqtParams, complex_magnitude, cqt, resample};
+use rosa::{CqtParams, CqtWorkspace, cqt_magnitude, resample};
 
 use crate::{Error, MIN_MODEL_FRAMES, Result};
 
@@ -28,16 +28,19 @@ impl PreparedAudio {
 }
 
 /// Stateless MusicalKeyCNN CQT preprocessor.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct KeyPreprocessor;
+pub struct KeyPreprocessor {
+    cqt: CqtWorkspace,
+}
 
 impl KeyPreprocessor {
     #[must_use]
-    pub const fn new() -> Self {
-        Self
+    pub fn new() -> Self {
+        Self {
+            cqt: CqtWorkspace::new(),
+        }
     }
 
-    pub fn prepare(&self, mono: &[f32], sample_rate: u32) -> Result<PreparedAudio> {
+    pub fn prepare(&mut self, mono: &[f32], sample_rate: u32) -> Result<PreparedAudio> {
         if sample_rate == 0 {
             return Err(Error::InvalidAudio("sample rate is zero".to_owned()));
         }
@@ -68,8 +71,8 @@ impl KeyPreprocessor {
             bins_per_octave: BINS_PER_OCTAVE,
             ..CqtParams::default()
         };
-        let (real, imaginary) = cqt(&samples, &params);
-        let magnitude = complex_magnitude(&real, &imaginary);
+        let magnitude = cqt_magnitude(&samples, &params, &mut self.cqt)
+            .map_err(|source| Error::InvalidAudio(format!("CQT failed: {source}")))?;
         if magnitude.rows() != FREQUENCY_BINS || magnitude.cols() < MIN_MODEL_FRAMES {
             return Err(Error::InvalidAudio(format!(
                 "CQT returned shape {:?}, expected {FREQUENCY_BINS} rows and at least {MIN_MODEL_FRAMES} time frames",
@@ -83,6 +86,12 @@ impl KeyPreprocessor {
             log_magnitude.cols(),
         )
         .map(|spectrogram| PreparedAudio { spectrogram })
+    }
+}
+
+impl Default for KeyPreprocessor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -104,7 +113,12 @@ fn spectrogram_tensor(values: &[f64], rows: usize, columns: usize) -> Result<Ten
 
 #[cfg(test)]
 mod tests {
-    use super::{FREQUENCY_BINS, spectrogram_tensor};
+    use rosa::{CqtParams, complex_magnitude, cqt};
+
+    use super::{
+        BINS_PER_OCTAVE, FREQUENCY_BINS, HOP_LENGTH, KeyPreprocessor, MINIMUM_FREQUENCY_HZ,
+        MODEL_SAMPLE_RATE, spectrogram_tensor,
+    };
 
     #[test]
     fn preserves_complete_variable_width_spectrogram() -> Result<(), Box<dyn std::error::Error>> {
@@ -117,6 +131,49 @@ mod tests {
         assert_eq!(tensor.data.len(), values.len());
         assert_eq!(tensor.data.get(699), Some(&699.0));
         assert_eq!(tensor.data.get(700), Some(&700.0));
+        Ok(())
+    }
+
+    #[test]
+    fn streaming_preprocessor_matches_materialized_cqt_tensor()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let samples = (0..MODEL_SAMPLE_RATE as usize * 2)
+            .map(|index| {
+                let time = index as f64 / f64::from(MODEL_SAMPLE_RATE);
+                ((std::f64::consts::TAU * 130.8128 * time).sin()
+                    + 0.5 * (std::f64::consts::TAU * 195.9977 * time).sin()) as f32
+            })
+            .collect::<Vec<_>>();
+        let prepared = KeyPreprocessor::new().prepare(&samples, MODEL_SAMPLE_RATE)?;
+        let samples = samples
+            .iter()
+            .map(|sample| f64::from(*sample))
+            .collect::<Vec<_>>();
+        let parameters = CqtParams {
+            sr: f64::from(MODEL_SAMPLE_RATE),
+            hop_length: HOP_LENGTH,
+            fmin: MINIMUM_FREQUENCY_HZ,
+            n_bins: FREQUENCY_BINS,
+            bins_per_octave: BINS_PER_OCTAVE,
+            ..CqtParams::default()
+        };
+        let (real, imaginary) = cqt(&samples, &parameters);
+        let expected = complex_magnitude(&real, &imaginary).map(f64::ln_1p);
+        assert_eq!(
+            prepared.spectrogram.shape,
+            [1, 1, expected.rows(), expected.cols()]
+        );
+        let maximum_difference = prepared
+            .spectrogram
+            .data
+            .iter()
+            .zip(expected.as_slice())
+            .map(|(actual, expected)| (f64::from(*actual) - expected).abs())
+            .fold(0.0_f64, f64::max);
+        assert!(
+            maximum_difference < 1.0e-6,
+            "streaming tensor differs by {maximum_difference}"
+        );
         Ok(())
     }
 }
