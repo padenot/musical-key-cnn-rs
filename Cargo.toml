@@ -1,0 +1,39 @@
+[package]
+name = "musical-key-cnn"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+license = "MIT"
+description = "Hardware-accelerated Rust inference for MusicalKeyCNN"
+
+[dependencies]
+anyhow = "1.0"
+beat-this = { path = "../beat-this-rs", default-features = false }
+clap = { version = "4.5", features = ["derive"] }
+rosa = { path = "../rosa" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+beat-this = { path = "../beat-this-rs", default-features = false, features = ["rustnn-coreml"] }
+
+[dev-dependencies]
+approx = "0.5"
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+expect_used = "deny"
+indexing_slicing = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "deny"
+
+[[bin]]
+name = "musical-key-cnn"
+path = "src/main.rs"

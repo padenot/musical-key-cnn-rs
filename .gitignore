@@ -1,0 +1,6 @@
+/.DS_Store
+/target/
+/models/*-debug.onnx
+/model-tools/.venv/
+/model-tools/__pycache__/
+/models/*.mlpackage/
