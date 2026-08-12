@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "coreml"))]
 use beat_this::RustnnCoremlModel;
 use beat_this::{Model, RtenRuntime, Runtime, Tensor};
 
@@ -14,7 +14,7 @@ fn input() -> Tensor {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "coreml"))]
 fn coreml_matches_rten() -> Result<()> {
     let input = input();
     let mut rten = RtenRuntime.load_model(Path::new("models/keynet.onnx"))?;

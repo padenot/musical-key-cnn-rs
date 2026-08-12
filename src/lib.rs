@@ -1,9 +1,10 @@
 mod key;
 mod preprocessor;
 
+#[cfg(all(target_os = "macos", feature = "coreml"))]
 use std::path::Path;
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "coreml"))]
 pub use beat_this::RustnnCoremlModel;
 use beat_this::{Model, Tensor};
 pub use beat_this::{RtenRuntime, Runtime};
@@ -63,7 +64,7 @@ impl<M: Model> KeyDetector<M> {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "coreml"))]
 impl KeyDetector<RustnnCoremlModel> {
     pub fn from_coreml_assets(
         graph: &Path,
