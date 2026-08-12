@@ -9,7 +9,8 @@ pub use beat_this::RustnnCoremlModel;
 use beat_this::{Model, Tensor};
 pub use beat_this::{RtenRuntime, Runtime};
 pub use key::{CamelotKey, KeyMode};
-use preprocessor::{PreparedChunk, SpectrogramPreprocessor};
+use preprocessor::PreparedChunk;
+pub use preprocessor::{KeyPreprocessor, PreparedAudio};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -39,7 +40,7 @@ pub struct KeyEstimate {
 
 pub struct KeyDetector<M> {
     model: M,
-    preprocessor: SpectrogramPreprocessor,
+    preprocessor: KeyPreprocessor,
 }
 
 impl<M: Model> KeyDetector<M> {
@@ -47,13 +48,17 @@ impl<M: Model> KeyDetector<M> {
     pub fn new(model: M) -> Self {
         Self {
             model,
-            preprocessor: SpectrogramPreprocessor,
+            preprocessor: KeyPreprocessor::new(),
         }
     }
 
     pub fn detect(&mut self, mono: &[f32], sample_rate: u32) -> Result<KeyEstimate> {
-        let chunks = self.preprocessor.prepare(mono, sample_rate)?;
-        let logits = infer_weighted_logits(&mut self.model, &chunks)?;
+        let prepared = self.preprocessor.prepare(mono, sample_rate)?;
+        self.detect_prepared(prepared)
+    }
+
+    pub fn detect_prepared(&mut self, prepared: PreparedAudio) -> Result<KeyEstimate> {
+        let logits = infer_weighted_logits(&mut self.model, &prepared.chunks)?;
         let probabilities = softmax(logits)?;
         estimate_from_probabilities(probabilities)
     }

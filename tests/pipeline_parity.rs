@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::{Result, ensure};
 use beat_this::{RtenRuntime, Runtime};
-use musical_key_cnn::KeyDetector;
+use musical_key_cnn::{KeyDetector, KeyPreprocessor};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -35,10 +35,11 @@ fn rust_pipeline_matches_librosa_and_pytorch() -> Result<()> {
         serde_json::from_str(include_str!("fixtures/synthetic_pipeline.json"))?;
     let model = RtenRuntime.load_model(Path::new("models/keynet.onnx"))?;
     let mut detector = KeyDetector::new(model);
-    let estimate = detector.detect(
+    let prepared = KeyPreprocessor::new().prepare(
         &synthetic_audio(fixture.sample_rate, fixture.sample_count),
         fixture.sample_rate,
     )?;
+    let estimate = detector.detect_prepared(prepared)?;
     ensure!(estimate.key.to_string() == fixture.camelot, "key differs");
     let maximum_difference = estimate
         .probabilities

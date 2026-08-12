@@ -15,10 +15,25 @@ pub(crate) struct PreparedChunk {
     pub source_frames: usize,
 }
 
-pub(crate) struct SpectrogramPreprocessor;
+/// Opaque, model-ready MusicalKeyCNN input.
+///
+/// Preparing audio is CPU-intensive and can safely run in parallel before the
+/// prepared input is sent to a shared inference worker.
+pub struct PreparedAudio {
+    pub(crate) chunks: Vec<PreparedChunk>,
+}
 
-impl SpectrogramPreprocessor {
-    pub fn prepare(&self, mono: &[f32], sample_rate: u32) -> Result<Vec<PreparedChunk>> {
+/// Stateless MusicalKeyCNN CQT preprocessor.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct KeyPreprocessor;
+
+impl KeyPreprocessor {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self
+    }
+
+    pub fn prepare(&self, mono: &[f32], sample_rate: u32) -> Result<PreparedAudio> {
         if sample_rate == 0 {
             return Err(Error::InvalidAudio("sample rate is zero".to_owned()));
         }
@@ -63,6 +78,7 @@ impl SpectrogramPreprocessor {
             log_magnitude.rows(),
             log_magnitude.cols(),
         )
+        .map(|chunks| PreparedAudio { chunks })
     }
 }
 
