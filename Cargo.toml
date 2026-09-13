@@ -20,7 +20,7 @@ coreml = ["beat-this/rustnn-coreml"]
 
 [dependencies]
 anyhow = "1.0"
-beat-this = { git = "https://github.com/padenot/beat-this-rs.git", rev = "7eb084f7975bf029a3020fb847f3ba41a4b94003", default-features = false }
+beat-this = { git = "https://github.com/padenot/beat-this-rs.git", rev = "4d7db4a384f6d36db6f4e33fffd0d1207ce70715", default-features = false }
 clap = { version = "4.5", features = ["derive"], optional = true }
 env_logger = { version = "0.10", optional = true }
 realfft = "3.4"
