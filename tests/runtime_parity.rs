@@ -48,3 +48,46 @@ fn coreml_matches_rten() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn variable_width_coreml_batch_matches_rten() -> Result<()> {
+    let mut rten = RtenRuntime.load_model(Path::new("models/keynet.onnx"))?;
+    let mut coreml = RustnnCoremlModel::load_aot_batched(
+        Path::new("models/keynet.json"),
+        Path::new("models/keynet.mlmodelc"),
+        FRAME_COUNTS.len(),
+        CoreMlAcceleration::Gpu,
+    )?;
+    let inputs = FRAME_COUNTS.map(input);
+    let named_inputs = inputs
+        .iter()
+        .map(|input| [("spectrogram", input)])
+        .collect::<Vec<_>>();
+    let batches = named_inputs
+        .iter()
+        .map(|inputs| inputs.as_slice())
+        .collect::<Vec<_>>();
+    let actual = coreml.run_batch(&batches)?;
+    ensure!(actual.len() == inputs.len(), "output batch count differs");
+    for ((frames, input), mut actual) in FRAME_COUNTS.into_iter().zip(inputs).zip(actual) {
+        let expected = rten
+            .run(&[("spectrogram", &input)])?
+            .remove("logits")
+            .context("RTen returned no logits")?;
+        let actual = actual
+            .remove("logits")
+            .context("Core ML returned no logits")?;
+        ensure!(expected.shape == actual.shape, "output shapes differ");
+        let maximum_difference = expected
+            .data
+            .iter()
+            .zip(&actual.data)
+            .map(|(expected, actual)| (expected - actual).abs())
+            .fold(0.0_f32, f32::max);
+        ensure!(
+            maximum_difference < 1e-3,
+            "Core ML batch differs from RTen by {maximum_difference} at {frames} frames"
+        );
+    }
+    Ok(())
+}

@@ -67,6 +67,42 @@ impl<M: Model> KeyDetector<M> {
         estimate_from_probabilities(probabilities)
     }
 
+    /// Detect several independently-sized prepared tracks in one runtime batch.
+    pub fn detect_prepared_batch(
+        &mut self,
+        prepared: &[&PreparedAudio],
+    ) -> Result<Vec<KeyEstimate>> {
+        if prepared.is_empty() {
+            return Err(Error::InvalidAudio(
+                "key inference batch is empty".to_owned(),
+            ));
+        }
+        let inputs = prepared
+            .iter()
+            .map(|audio| [(INPUT_NAME, &audio.spectrogram)])
+            .collect::<Vec<_>>();
+        let batches = inputs
+            .iter()
+            .map(|inputs| inputs.as_slice())
+            .collect::<Vec<_>>();
+        let outputs = self.model.run_batch(&batches).map_err(Error::Model)?;
+        if outputs.len() != prepared.len() {
+            return Err(Error::InvalidModelOutput(format!(
+                "model returned {} key batches for {} prepared tracks",
+                outputs.len(),
+                prepared.len()
+            )));
+        }
+        outputs
+            .into_iter()
+            .map(|outputs| {
+                let logits = logits_from_outputs(outputs)?;
+                let probabilities = softmax(logits)?;
+                estimate_from_probabilities(probabilities)
+            })
+            .collect()
+    }
+
     #[must_use]
     pub fn model_mut(&mut self) -> &mut M {
         &mut self.model
@@ -87,9 +123,15 @@ impl KeyDetector<RustnnCoremlModel> {
 }
 
 fn infer_logits<M: Model>(model: &mut M, spectrogram: &Tensor) -> Result<[f32; CLASS_COUNT]> {
-    let mut outputs = model
+    let outputs = model
         .run(&[(INPUT_NAME, spectrogram)])
         .map_err(Error::Model)?;
+    logits_from_outputs(outputs)
+}
+
+fn logits_from_outputs(
+    mut outputs: std::collections::HashMap<String, Tensor>,
+) -> Result<[f32; CLASS_COUNT]> {
     let output = outputs.remove(OUTPUT_NAME).ok_or_else(|| {
         Error::InvalidModelOutput(format!("model did not return {OUTPUT_NAME:?}"))
     })?;
