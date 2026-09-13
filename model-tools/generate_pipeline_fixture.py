@@ -14,8 +14,7 @@ from reference_predict import camelot_class
 
 
 LOGGER = logging.getLogger("musical_key_cnn.pipeline_fixture")
-SAMPLE_RATE = 44_100
-DURATION_SECONDS = 24
+MODEL_SAMPLE_RATE = 44_100
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -24,12 +23,14 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("checkpoint", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--source-sample-rate", type=int, default=MODEL_SAMPLE_RATE)
+    parser.add_argument("--duration-seconds", type=int, default=24)
     return parser.parse_args()
 
 
-def synthetic_audio() -> np.ndarray:
-    sample_count = SAMPLE_RATE * DURATION_SECONDS
-    time = np.arange(sample_count, dtype=np.float64) / SAMPLE_RATE
+def synthetic_audio(sample_rate: int, duration_seconds: int) -> np.ndarray:
+    sample_count = sample_rate * duration_seconds
+    time = np.arange(sample_count, dtype=np.float64) / sample_rate
     envelope = 0.55 + 0.45 * np.sin(2 * np.pi * 0.37 * time) ** 2
     signal = envelope * (
         0.42 * np.sin(2 * np.pi * 130.8128 * time)
@@ -42,11 +43,25 @@ def synthetic_audio() -> np.ndarray:
 
 def main() -> int:
     arguments = parse_arguments()
+    source = synthetic_audio(
+        arguments.source_sample_rate,
+        arguments.duration_seconds,
+    )
+    samples = (
+        librosa.resample(
+            source,
+            orig_sr=arguments.source_sample_rate,
+            target_sr=MODEL_SAMPLE_RATE,
+            res_type="soxr_hq",
+        )
+        if arguments.source_sample_rate != MODEL_SAMPLE_RATE
+        else source
+    )
     spectrogram = np.log1p(
         np.abs(
             librosa.cqt(
-                synthetic_audio(),
-                sr=SAMPLE_RATE,
+                samples,
+                sr=MODEL_SAMPLE_RATE,
                 hop_length=8_820,
                 n_bins=105,
                 bins_per_octave=24,
@@ -60,8 +75,8 @@ def main() -> int:
         logits = model(tensor)[0].numpy()
         probabilities = torch.softmax(torch.from_numpy(logits), dim=0).numpy()
     payload = {
-        "sample_rate": SAMPLE_RATE,
-        "sample_count": SAMPLE_RATE * DURATION_SECONDS,
+        "sample_rate": arguments.source_sample_rate,
+        "sample_count": arguments.source_sample_rate * arguments.duration_seconds,
         "frames": int(spectrogram.shape[1]),
         **camelot_class(probabilities),
     }

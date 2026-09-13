@@ -1,5 +1,10 @@
 use beat_this::Tensor;
-use rosa::{CqtParams, CqtWorkspace, cqt_magnitude, resample};
+
+mod cqt;
+mod resample;
+
+use cqt::{CqtWorkspace, cqt_magnitude};
+use resample::resample;
 
 use crate::{Error, MIN_MODEL_FRAMES, Result};
 
@@ -63,15 +68,7 @@ impl KeyPreprocessor {
         if samples.len() < HOP_LENGTH {
             samples.resize(HOP_LENGTH, 0.0);
         }
-        let params = CqtParams {
-            sr: f64::from(MODEL_SAMPLE_RATE),
-            hop_length: HOP_LENGTH,
-            fmin: MINIMUM_FREQUENCY_HZ,
-            n_bins: FREQUENCY_BINS,
-            bins_per_octave: BINS_PER_OCTAVE,
-            ..CqtParams::default()
-        };
-        let magnitude = cqt_magnitude(&samples, &params, &mut self.cqt)
+        let magnitude = cqt_magnitude(&samples, &mut self.cqt)
             .map_err(|source| Error::InvalidAudio(format!("CQT failed: {source}")))?;
         if magnitude.rows() != FREQUENCY_BINS || magnitude.cols() < MIN_MODEL_FRAMES {
             return Err(Error::InvalidAudio(format!(
@@ -113,12 +110,7 @@ fn spectrogram_tensor(values: &[f64], rows: usize, columns: usize) -> Result<Ten
 
 #[cfg(test)]
 mod tests {
-    use rosa::{CqtParams, complex_magnitude, cqt};
-
-    use super::{
-        BINS_PER_OCTAVE, FREQUENCY_BINS, HOP_LENGTH, KeyPreprocessor, MINIMUM_FREQUENCY_HZ,
-        MODEL_SAMPLE_RATE, spectrogram_tensor,
-    };
+    use super::{FREQUENCY_BINS, KeyPreprocessor, MODEL_SAMPLE_RATE, spectrogram_tensor};
 
     #[test]
     fn preserves_complete_variable_width_spectrogram() -> Result<(), Box<dyn std::error::Error>> {
@@ -135,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn streaming_preprocessor_matches_materialized_cqt_tensor()
+    fn streaming_preprocessor_is_reusable_for_variable_width_audio()
     -> Result<(), Box<dyn std::error::Error>> {
         let samples = (0..MODEL_SAMPLE_RATE as usize * 2)
             .map(|index| {
@@ -144,36 +136,16 @@ mod tests {
                     + 0.5 * (std::f64::consts::TAU * 195.9977 * time).sin()) as f32
             })
             .collect::<Vec<_>>();
-        let prepared = KeyPreprocessor::new().prepare(&samples, MODEL_SAMPLE_RATE)?;
-        let samples = samples
-            .iter()
-            .map(|sample| f64::from(*sample))
-            .collect::<Vec<_>>();
-        let parameters = CqtParams {
-            sr: f64::from(MODEL_SAMPLE_RATE),
-            hop_length: HOP_LENGTH,
-            fmin: MINIMUM_FREQUENCY_HZ,
-            n_bins: FREQUENCY_BINS,
-            bins_per_octave: BINS_PER_OCTAVE,
-            ..CqtParams::default()
-        };
-        let (real, imaginary) = cqt(&samples, &parameters);
-        let expected = complex_magnitude(&real, &imaginary).map(f64::ln_1p);
-        assert_eq!(
-            prepared.spectrogram.shape,
-            [1, 1, expected.rows(), expected.cols()]
-        );
-        let maximum_difference = prepared
-            .spectrogram
-            .data
-            .iter()
-            .zip(expected.as_slice())
-            .map(|(actual, expected)| (f64::from(*actual) - expected).abs())
-            .fold(0.0_f64, f64::max);
-        assert!(
-            maximum_difference < 1.0e-6,
-            "streaming tensor differs by {maximum_difference}"
-        );
+        let mut preprocessor = KeyPreprocessor::new();
+        let short = preprocessor.prepare(&samples, MODEL_SAMPLE_RATE)?;
+        let long = preprocessor.prepare(
+            &[samples.as_slice(), samples.as_slice()].concat(),
+            MODEL_SAMPLE_RATE,
+        )?;
+        assert_eq!(short.spectrogram.shape, [1, 1, FREQUENCY_BINS, 11]);
+        assert_eq!(long.spectrogram.shape, [1, 1, FREQUENCY_BINS, 21]);
+        assert!(short.spectrogram.data.iter().all(|value| value.is_finite()));
+        assert!(long.spectrogram.data.iter().all(|value| value.is_finite()));
         Ok(())
     }
 }

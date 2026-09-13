@@ -1,9 +1,13 @@
+#[cfg(feature = "cli")]
+mod audio;
 mod key;
 mod preprocessor;
 
 #[cfg(all(target_os = "macos", feature = "coreml"))]
 use std::path::Path;
 
+#[cfg(feature = "cli")]
+pub use audio::load_mono;
 #[cfg(all(target_os = "macos", feature = "coreml"))]
 pub use beat_this::{CoreMlAcceleration, RustnnCoremlModel};
 use beat_this::{Model, Tensor};

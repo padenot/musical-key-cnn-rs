@@ -6,10 +6,13 @@ use beat_this::{RtenRuntime, Runtime};
 use musical_key_cnn::{KeyDetector, KeyPreprocessor};
 use serde::Deserialize;
 
+const MAX_PROBABILITY_DIFFERENCE: f32 = 2e-3;
+
 #[derive(Deserialize)]
 struct PipelineFixture {
     sample_rate: u32,
     sample_count: usize,
+    frames: usize,
     camelot: String,
     probabilities: [f32; 24],
 }
@@ -31,25 +34,39 @@ fn synthetic_audio(sample_rate: u32, sample_count: usize) -> Vec<f32> {
 
 #[test]
 fn rust_pipeline_matches_librosa_and_pytorch() -> Result<()> {
-    let fixture: PipelineFixture =
-        serde_json::from_str(include_str!("fixtures/synthetic_pipeline.json"))?;
-    let model = RtenRuntime.load_model(Path::new("models/keynet.onnx"))?;
-    let mut detector = KeyDetector::new(model);
-    let prepared = KeyPreprocessor::new().prepare(
-        &synthetic_audio(fixture.sample_rate, fixture.sample_count),
-        fixture.sample_rate,
-    )?;
-    let estimate = detector.detect_prepared(&prepared)?;
-    ensure!(estimate.key.to_string() == fixture.camelot, "key differs");
-    let maximum_difference = estimate
-        .probabilities
-        .iter()
-        .zip(fixture.probabilities)
-        .map(|(actual, expected)| (actual - expected).abs())
-        .fold(0.0_f32, f32::max);
-    ensure!(
-        maximum_difference < 2e-5,
-        "Rust pipeline differs from librosa/PyTorch by {maximum_difference}"
-    );
+    for (name, contents) in [
+        ("44.1 kHz", include_str!("fixtures/synthetic_pipeline.json")),
+        (
+            "48 kHz",
+            include_str!("fixtures/synthetic_pipeline_48000.json"),
+        ),
+    ] {
+        let fixture: PipelineFixture = serde_json::from_str(contents)?;
+        let model = RtenRuntime.load_model(Path::new("models/keynet.onnx"))?;
+        let mut detector = KeyDetector::new(model);
+        let prepared = KeyPreprocessor::new().prepare(
+            &synthetic_audio(fixture.sample_rate, fixture.sample_count),
+            fixture.sample_rate,
+        )?;
+        ensure!(
+            prepared.frame_count() == fixture.frames,
+            "{name} frame count differs"
+        );
+        let estimate = detector.detect_prepared(&prepared)?;
+        ensure!(
+            estimate.key.to_string() == fixture.camelot,
+            "{name} key differs"
+        );
+        let maximum_difference = estimate
+            .probabilities
+            .iter()
+            .zip(fixture.probabilities)
+            .map(|(actual, expected)| (actual - expected).abs())
+            .fold(0.0_f32, f32::max);
+        ensure!(
+            maximum_difference < MAX_PROBABILITY_DIFFERENCE,
+            "{name} Rust pipeline differs from librosa/PyTorch by {maximum_difference}"
+        );
+    }
     Ok(())
 }

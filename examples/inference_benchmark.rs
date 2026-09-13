@@ -117,14 +117,9 @@ fn load_audio(cli: &Cli) -> Result<(String, Vec<f32>, u32)> {
         return Ok(("canonical-fixture".to_owned(), samples, sample_rate));
     }
     let path = cli.audio.as_deref().context("audio path is required")?;
-    let audio = path.to_str().context("audio path is not valid UTF-8")?;
-    let (samples, sample_rate) = rosa::load(audio, None, true)
+    let (samples, sample_rate) = musical_key_cnn::load_mono(path)
         .with_context(|| format!("could not decode {}", path.display()))?;
-    Ok((
-        path.display().to_string(),
-        samples.into_iter().map(|sample| sample as f32).collect(),
-        sample_rate,
-    ))
+    Ok((path.display().to_string(), samples, sample_rate))
 }
 
 fn benchmark_coreml(

@@ -9,9 +9,9 @@ ML model; the same ONNX model runs through RTen as the portable reference backen
 graph accepts 8 through 4,096 CQT frames (roughly 1.6 seconds through 13 minutes 39 seconds);
 RTen's symbolic ONNX input has the same minimum and no upper bound.
 
-Cargo fetches pinned `beat-this-rs` and `rosa` revisions. `rosa` provides resampling and the
-librosa-compatible CQT used by the parity tests. Model regeneration additionally expects sibling
-`rustnn` and `onnx2webnn` checkouts under `~/src/repositories`.
+The fixed model preprocessor lives in this crate and is checked against frozen librosa/PyTorch
+fixtures at 44.1 and 48 kHz. Sample-rate conversion uses Rubato's offline FFT resampler. Model
+regeneration expects sibling `rustnn` and `onnx2webnn` checkouts under `~/src/repositories`.
 
 ## Models
 
@@ -81,14 +81,12 @@ nor inference belongs on the GUI or real-time audio thread.
 ## Verification
 
 ```sh
-cargo test --all-targets
+cargo test --release --all-targets --all-features
 uv run --project model-tools model-tools/export_debug_model.py \
   models/keynet.onnx models/keynet-debug.onnx
-cargo test --test intermediate_parity -- --ignored --nocapture
+cargo test --release --test intermediate_parity -- --ignored --nocapture
 ```
 
-The first command checks the full Rust CQT + RTen result against a deterministic librosa +
-PyTorch fixture. Runtime parity covers the minimum 8- and realistic 121-, 512-, and 1,501-frame
-inputs. Boundary routing tests cover 4,096 and 4,097 frames without allocating maximum-sized
-model activations. The ignored diagnostic exposes every neural-network stage and compares RTen
-to Core ML.
+The first command checks the full Rust CQT + RTen result against deterministic librosa + PyTorch
+fixtures, including 48 kHz input resampling. Runtime parity covers variable-width batches. The
+ignored diagnostic exposes every neural-network stage and compares RTen to Core ML.

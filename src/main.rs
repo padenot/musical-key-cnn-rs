@@ -6,7 +6,7 @@ use clap::{Parser, ValueEnum};
 #[cfg(all(target_os = "macos", feature = "coreml"))]
 use musical_key_cnn::{CoreMlAcceleration, RustnnCoremlModel};
 use musical_key_cnn::{
-    KeyDetector, KeyEstimate, KeyPreprocessor, MAX_COREML_FRAMES, PreparedAudio,
+    KeyDetector, KeyEstimate, KeyPreprocessor, MAX_COREML_FRAMES, PreparedAudio, load_mono,
 };
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
@@ -65,16 +65,8 @@ fn main() -> Result<()> {
 }
 
 fn run(cli: Cli) -> Result<()> {
-    let audio_path = cli
-        .audio
-        .to_str()
-        .context("audio path is not valid UTF-8")?;
-    let (samples, sample_rate) = rosa::load(audio_path, None, true)
+    let (samples, sample_rate) = load_mono(&cli.audio)
         .with_context(|| format!("could not decode {}", cli.audio.display()))?;
-    let samples = samples
-        .into_iter()
-        .map(|sample| sample as f32)
-        .collect::<Vec<_>>();
     let prepared = KeyPreprocessor::new().prepare(&samples, sample_rate)?;
     let mut models = load_models(&cli)?;
     let (backend, estimate) = models.detect(&prepared)?;
