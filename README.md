@@ -9,10 +9,9 @@ ML model; the same ONNX model runs through RTen as the portable reference backen
 graph accepts 8 through 4,096 CQT frames (roughly 1.6 seconds through 13 minutes 39 seconds);
 RTen's symbolic ONNX input has the same minimum and no upper bound.
 
-This repository currently expects sibling checkouts of `beat-this-rs`, `rosa`, `rustnn`, and
-`onnx2webnn` under `~/src/repositories`. `rosa` includes the strict librosa CQT parity fixes used
-by the committed end-to-end fixture (commit `980f350`). The ONNX converter includes the explicit
-`SAME_UPPER` padding fix used by this model (commit `d42b1ad`).
+Cargo fetches pinned `beat-this-rs` and `rosa` revisions. `rosa` provides resampling and the
+librosa-compatible CQT used by the parity tests. Model regeneration additionally expects sibling
+`rustnn` and `onnx2webnn` checkouts under `~/src/repositories`.
 
 ## Models
 
