@@ -149,6 +149,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 [[package]]
 name = "beat-this"
 version = "1.0.0"
+source = "git+https://github.com/padenot/beat-this-rs.git?rev=de96e25bba0ac924f69116272ab361274a428d51#de96e25bba0ac924f69116272ab361274a428d51"
 dependencies = [
  "anyhow",
  "clap",
@@ -1340,6 +1341,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 [[package]]
 name = "rosa"
 version = "0.1.0"
+source = "git+https://github.com/padenot/rosa.git?rev=6d2ccde566c66ec4be300f89b68fd287b1e14c07#6d2ccde566c66ec4be300f89b68fd287b1e14c07"
 dependencies = [
  "matrixmultiply",
  "num-complex",
@@ -1521,6 +1523,7 @@ dependencies = [
 [[package]]
 name = "rustnn"
 version = "0.5.11"
+source = "git+https://github.com/padenot/rustnn?rev=1b612291d40793112a64885f64209743a0f3bcfe#1b612291d40793112a64885f64209743a0f3bcfe"
 dependencies = [
  "base64",
  "block",
